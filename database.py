@@ -1,6 +1,5 @@
-import sqlite3
 import aiosqlite
-from config import MASTER_CLASSES
+from config import ACTIVITIES
 
 class Database:
     def __init__(self, db_path='votes.db'):
@@ -20,9 +19,9 @@ class Database:
                 )
             ''')
             
-            # Таблица мастер-классов
+            # Таблица активностей
             await db.execute('''
-                CREATE TABLE IF NOT EXISTS master_classes (
+                CREATE TABLE IF NOT EXISTS activities (
                     id INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
                     max_slots INTEGER NOT NULL,
@@ -35,20 +34,43 @@ class Database:
                 CREATE TABLE IF NOT EXISTS votes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
-                    master_class_id INTEGER NOT NULL,
+                    activity_id INTEGER NOT NULL,
                     voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users (telegram_id),
-                    FOREIGN KEY (master_class_id) REFERENCES master_classes (id),
-                    UNIQUE(user_id, master_class_id)
+                    FOREIGN KEY (activity_id) REFERENCES activities (id),
+                    UNIQUE(user_id, activity_id)
                 )
             ''')
             
-            # Заполняем мастер-классы
-            for mc_id, mc_data in MASTER_CLASSES.items():
-                await db.execute('''
-                    INSERT OR REPLACE INTO master_classes (id, name, max_slots, used_slots)
-                    VALUES (?, ?, ?, ?)
-                ''', (mc_id, mc_data['name'], mc_data['max_slots'], mc_data['used_slots']))
+            await db.commit()
+        
+        # Синхронизируем с config.py
+        await self.update_activities()
+    
+    async def update_activities(self):
+        """Обновляет список активностей в базе данных"""
+        async with aiosqlite.connect(self.db_path) as db:
+            for activity_id, activity_data in ACTIVITIES.items():
+                # Проверяем, существует ли уже эта активность
+                cursor = await db.execute(
+                    'SELECT 1 FROM activities WHERE id = ?', 
+                    (activity_id,)
+                )
+                exists = await cursor.fetchone()
+                
+                if exists:
+                    # Обновляем существующую
+                    await db.execute('''
+                        UPDATE activities 
+                        SET name = ?, max_slots = ?
+                        WHERE id = ?
+                    ''', (activity_data['name'], activity_data['max_slots'], activity_id))
+                else:
+                    # Добавляем новую
+                    await db.execute('''
+                        INSERT INTO activities (id, name, max_slots)
+                        VALUES (?, ?, ?)
+                    ''', (activity_id, activity_data['name'], activity_data['max_slots']))
             
             await db.commit()
     
@@ -83,24 +105,24 @@ class Database:
         """Получает информацию о голосе пользователя"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute('''
-                SELECT mc.name, v.voted_at 
+                SELECT a.name, v.voted_at 
                 FROM votes v
-                JOIN master_classes mc ON v.master_class_id = mc.id
+                JOIN activities a ON v.activity_id = a.id
                 WHERE v.user_id = ?
             ''', (telegram_id,))
             return await cursor.fetchone()
     
-    async def get_master_classes(self):
-        """Получает список всех мастер-классов"""
+    async def get_activities(self):
+        """Получает список всех активностей"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute('''
                 SELECT id, name, max_slots, used_slots 
-                FROM master_classes 
+                FROM activities 
                 ORDER BY id
             ''')
             return await cursor.fetchall()
     
-    async def try_reserve_slot(self, master_class_id: int, user_id: int) -> bool:
+    async def try_reserve_slot(self, activity_id: int, user_id: int) -> bool:
         """Пытается забронировать место (с транзакцией)"""
         async with aiosqlite.connect(self.db_path) as db:
             # Начинаем транзакцию
@@ -118,17 +140,17 @@ class Database:
                 
                 # Пытаемся занять место
                 cursor = await db.execute('''
-                    UPDATE master_classes 
+                    UPDATE activities 
                     SET used_slots = used_slots + 1 
                     WHERE id = ? AND used_slots < max_slots
                     RETURNING id
-                ''', (master_class_id,))
+                ''', (activity_id,))
                 
                 if await cursor.fetchone():
                     # Если место занято, записываем голос
                     await db.execute(
-                        'INSERT INTO votes (user_id, master_class_id) VALUES (?, ?)',
-                        (user_id, master_class_id)
+                        'INSERT INTO votes (user_id, activity_id) VALUES (?, ?)',
+                        (user_id, activity_id)
                     )
                     await db.execute('COMMIT')
                     return True
@@ -142,12 +164,12 @@ class Database:
                 return False
     
     async def get_statistics(self):
-        """Получает статистику по всем мастер-классам"""
+        """Получает статистику по всем активностям"""
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute('''
                 SELECT name, used_slots, max_slots,
                        CASE WHEN used_slots >= max_slots THEN 1 ELSE 0 END as is_full
-                FROM master_classes 
+                FROM activities 
                 ORDER BY id
             ''')
             return await cursor.fetchall()
@@ -158,3 +180,48 @@ class Database:
             cursor = await db.execute('SELECT COUNT(*) FROM users')
             result = await cursor.fetchone()
             return result[0] if result else 0
+
+    async def get_all_users(self):
+        """Получает всех зарегистрированных пользователей"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute('''
+                SELECT telegram_id, username, full_name, phone, registered_at 
+                FROM users 
+                ORDER BY registered_at
+            ''')
+            return await cursor.fetchall()
+
+    async def get_votes_details(self):
+        """Получает детальную информацию о всех записях"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute('''
+                SELECT 
+                    u.telegram_id,
+                    u.username,
+                    u.full_name,
+                    u.phone,
+                    a.name as activity_name,
+                    v.voted_at
+                FROM votes v
+                JOIN users u ON v.user_id = u.telegram_id
+                JOIN activities a ON v.activity_id = a.id
+                ORDER BY v.voted_at
+            ''')
+            return await cursor.fetchall()
+
+    async def get_activity_participants(self, activity_id: int):
+        """Получает участников конкретной активности"""
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute('''
+                SELECT 
+                    u.telegram_id,
+                    u.username,
+                    u.full_name,
+                    u.phone,
+                    v.voted_at
+                FROM votes v
+                JOIN users u ON v.user_id = u.telegram_id
+                WHERE v.activity_id = ?
+                ORDER BY v.voted_at
+            ''', (activity_id,))
+            return await cursor.fetchall()
