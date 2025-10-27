@@ -1,11 +1,12 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from database import Database
 
 def get_main_keyboard():
     """Основная клавиатура"""
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎯 Выбрать мастер-класс")],
+            [KeyboardButton(text="🎯 Выбрать активность")],
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="ℹ️ Моя запись")],
             [KeyboardButton(text="🆘 Помощь")]
         ],
@@ -22,22 +23,20 @@ def get_registration_keyboard():
         resize_keyboard=True
     )
 
-async def create_master_classes_keyboard():
-    """Создает инлайн-клавиатуру с мастер-классами"""
-    from database import Database
-    
+async def create_activities_keyboard():
+    """Создает инлайн-клавиатуру с активностями"""
     db = Database()
-    classes = await db.get_master_classes()
+    activities = await db.get_activities()
     
     builder = InlineKeyboardBuilder()
     
-    for mc_id, name, max_slots, used_slots in classes:
+    for activity_id, name, max_slots, used_slots in activities:
         is_full = used_slots >= max_slots
         emoji = "❌" if is_full else "✅"
         slots_text = f"({used_slots}/{max_slots})"
         
         button_text = f"{emoji} {name} {slots_text}"
-        callback_data = f"vote_{mc_id}" if not is_full else "full"
+        callback_data = f"vote_{activity_id}" if not is_full else "full"
         
         if not is_full:
             builder.add(InlineKeyboardButton(
