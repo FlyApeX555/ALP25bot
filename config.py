@@ -9,14 +9,17 @@ if not BOT_TOKEN:
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///votes.db')
 
-# Конфигурация мастер-классов
-MASTER_CLASSES = {
+# ID администраторов (замени на свои Telegram ID)
+ADMIN_IDS = [801181185]  # ЗАМЕНИ ЭТОТ ID НА СВОЙ РЕАЛЬНЫЙ!
+
+# Конфигурация активностей
+ACTIVITIES = {
     1: {"name": "Настольный теннис", "max_slots": 10},
-    2: {"name": "Квиз (Григорьев)", "max_slots": 40},
-    3: {"name": "Не игры (Кристина Астапенкова)", "max_slots": 40},
-    4: {"name": "Бункер (Бородина Аня)", "max_slots": 15},
-    5: {"name": "Нарды (Эльвира)", "max_slots": 12},
-    6: {"name": "Мафия (Кимн)", "max_slots": 15},
-    7: {"name": "Эстафета (Паша Шелкович)", "max_slots": 30},
+    2: {"name": "Квиз", "max_slots": 40},
+    3: {"name": "Не игры", "max_slots": 40},
+    4: {"name": "Бункер", "max_slots": 15},
+    5: {"name": "Нарды", "max_slots": 12},
+    6: {"name": "Мафия", "max_slots": 15},
+    7: {"name": "Эстафета", "max_slots": 30},
     8: {"name": "Иманджинариум", "max_slots": 7},
 }
