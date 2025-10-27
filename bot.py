@@ -1,3 +1,4 @@
+import os
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types, F
@@ -5,17 +6,24 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 from config import BOT_TOKEN, MASTER_CLASSES
 from database import Database
 from keyboards import get_main_keyboard, get_registration_keyboard, create_master_classes_keyboard
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Проверка токена
+if not BOT_TOKEN:
+    logger.error("BOT_TOKEN not found in environment variables!")
+    raise ValueError("BOT_TOKEN is required")
+
 # Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 db = Database()
 
